@@ -1,0 +1,170 @@
+#include <iostream>
+#include <vector>
+#include <chrono>
+#include <random>
+#include <cmath>
+
+using namespace std;
+using namespace std::chrono;
+
+
+vector<vector<int>> generate_matrix(int n) {
+    random_device rd;
+    mt19937 gen(rd());
+    uniform_int_distribution<> dis(1, 10);
+
+    vector<vector<int>> matrix(n, vector<int>(n));
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            matrix[i][j] = dis(gen);
+        }
+    }
+    return matrix;
+}
+
+
+vector<vector<int>> standard_mult(const vector<vector<int>>& A, const vector<vector<int>>& B) {
+    int n = A.size();
+    vector<vector<int>> C(n, vector<int>(n, 0));
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            for (int k = 0; k < n; ++k) {
+                C[i][j] += A[i][k] * B[k][j];
+            }
+        }
+    }
+    return C;
+}
+
+
+vector<vector<int>> add_matrix(const vector<vector<int>>& A, const vector<vector<int>>& B) {
+    int n = A.size();
+    vector<vector<int>> result(n, vector<int>(n));
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            result[i][j] = A[i][j] + B[i][j];
+        }
+    }
+    return result;
+}
+
+
+vector<vector<int>> subtract_matrix(const vector<vector<int>>& A, const vector<vector<int>>& B) {
+    int n = A.size();
+    vector<vector<int>> result(n, vector<int>(n));
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            result[i][j] = A[i][j] - B[i][j];
+        }
+    }
+    return result;
+}
+
+
+vector<vector<int>> strassen_mult(const vector<vector<int>>& A, const vector<vector<int>>& B) {
+    int n = A.size();
+
+    if (n <= 4) {
+        return standard_mult(A, B);
+    }
+
+    int new_size = n / 2;
+    vector<vector<int>> A11(new_size, vector<int>(new_size));
+    vector<vector<int>> A12(new_size, vector<int>(new_size));
+    vector<vector<int>> A21(new_size, vector<int>(new_size));
+    vector<vector<int>> A22(new_size, vector<int>(new_size));
+    vector<vector<int>> B11(new_size, vector<int>(new_size));
+    vector<vector<int>> B12(new_size, vector<int>(new_size));
+    vector<vector<int>> B21(new_size, vector<int>(new_size));
+    vector<vector<int>> B22(new_size, vector<int>(new_size));
+
+
+    for (int i = 0; i < new_size; ++i) {
+        for (int j = 0; j < new_size; ++j) {
+            A11[i][j] = A[i][j];
+            A12[i][j] = A[i][j + new_size];
+            A21[i][j] = A[i + new_size][j];
+            A22[i][j] = A[i + new_size][j + new_size];
+
+            B11[i][j] = B[i][j];
+            B12[i][j] = B[i][j + new_size];
+            B21[i][j] = B[i + new_size][j];
+            B22[i][j] = B[i + new_size][j + new_size];
+        }
+    }
+
+
+    vector<vector<int>> M1 = strassen_mult(add_matrix(A11, A22), add_matrix(B11, B22));
+    vector<vector<int>> M2 = strassen_mult(add_matrix(A21, A22), B11);
+    vector<vector<int>> M3 = strassen_mult(A11, subtract_matrix(B12, B22));
+    vector<vector<int>> M4 = strassen_mult(A22, subtract_matrix(B21, B11));
+    vector<vector<int>> M5 = strassen_mult(add_matrix(A11, A12), B22);
+    vector<vector<int>> M6 = strassen_mult(subtract_matrix(A21, A11), add_matrix(B11, B12));
+    vector<vector<int>> M7 = strassen_mult(subtract_matrix(A12, A22), add_matrix(B21, B22));
+
+
+    vector<vector<int>> C11 = add_matrix(subtract_matrix(add_matrix(M1, M4), M5), M7);
+    vector<vector<int>> C12 = add_matrix(M3, M5);
+    vector<vector<int>> C21 = add_matrix(M2, M4);
+    vector<vector<int>> C22 = subtract_matrix(add_matrix(add_matrix(M1, M3), M6), M2);
+
+ 
+    vector<vector<int>> C(n, vector<int>(n));
+    for (int i = 0; i < new_size; ++i) {
+        for (int j = 0; j < new_size; ++j) {
+            C[i][j] = C11[i][j];
+            C[i][j + new_size] = C12[i][j];
+            C[i + new_size][j] = C21[i][j];
+            C[i + new_size][j + new_size] = C22[i][j];
+        }
+    }
+
+    return C;
+}
+
+
+bool verify_result(const vector<vector<int>>& C1, const vector<vector<int>>& C2) {
+    int n = C1.size();
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            if (C1[i][j] != C2[i][j]) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+int main() {
+    vector<int> sizes = {4, 8, 16, 32, 64}; // Test sizes (must be powers of two)
+
+    cout << "Matrix Size | Standard Time (μs) | Strassen Time (μs) | Correct" << endl;
+    cout << "---------------------------------------------------------------" << endl;
+
+    for (int n : sizes) {
+
+        auto A = generate_matrix(n);
+        auto B = generate_matrix(n);
+
+
+        auto start = high_resolution_clock::now();
+        auto C_standard = standard_mult(A, B);
+        auto end = high_resolution_clock::now();
+        long duration_standard = duration_cast<microseconds>(end - start).count();
+
+        start = high_resolution_clock::now();
+        auto C_strassen = strassen_mult(A, B);
+        end = high_resolution_clock::now();
+        long duration_strassen = duration_cast<microseconds>(end - start).count();
+
+
+        bool correct = verify_result(C_standard, C_strassen);
+
+
+        printf("%10d | %18ld | %17ld | %s\n", 
+               n, duration_standard, duration_strassen, 
+               correct ? "Yes" : "No");
+    }
+
+    return 0;
+}
